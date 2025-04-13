@@ -229,6 +229,10 @@ To flush journal into zone file:
 rndc sync -clean diya.local
 ```
 
+```bash
+rndc sync
+```
+
 ---
 
 ## 🛡️ Security Note
