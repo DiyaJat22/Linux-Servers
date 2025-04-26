@@ -44,14 +44,22 @@ key "win-client-key" {
 zone "diya.local" IN {
     type master;
     file "/var/named/diya.local.zone";
-    allow-update { key win-client-key; };
+    allow-update { any; };  # using any for ddns update
 };
+
+zone "1.168.192.in-addr.arpa" IN {
+    type master;
+    file "/var/named/1.168.192.in-addr.arpa.zone";
+    allow-update { any; }; # using any for ddns update
+};
+
 ```
 
-### Step 4: Create Zone File `/var/named/diya.local.zone`
+### Step 4: Create Zone File 
+`/var/named/diya.local.zone`
 ```dns
 $TTL 86400
-@   IN  SOA ns1.diya.local. admin.diya.local. (
+@   IN  SOA ns1.diya.local. root.diya.local. (
         2025040901 ; Serial
         3600       ; Refresh
         1800       ; Retry
@@ -62,7 +70,57 @@ $TTL 86400
 ns1 IN  A   192.168.1.1
 ```
 
-### Step 5: Set Permissions
+`/var/named/1.168.192.in-addr.arpa.zone`
+```bash
+$TTL 86400
+@   IN  SOA ns1.diya.local. root.diya.local. (
+        2025040901 ; Serial
+        3600       ; Refresh
+        1800       ; Retry
+        604800     ; Expire
+        86400 )    ; Minimum
+
+    IN  NS  ns1.diya.local.
+1   IN  PTR ns1.diya.local.
+```
+
+### step 6: DHCP Configuration
+```bash
+# Enable DDNS
+ddns-update-style interim;
+ignore client-updates;
+update-static-leases on;
+
+# Specify TSIG key
+key "win-client-key" {
+    algorithm hmac-sha256;
+    secret "<YOUR_GENERATED_SECRET>";
+};
+
+# Define the DNS zones to update
+zone diya.local. {
+    primary 192.168.1.1;
+    key win-client-key;
+}
+
+zone 1.168.192.in-addr.arpa. {
+    primary 192.168.1.1;
+    key win-client-key;
+}
+
+# DHCP Scope Configuration
+subnet 192.168.1.0 netmask 255.255.255.0 {
+    range 192.168.1.100 192.168.1.200;
+    option routers 192.168.1.1;
+    option domain-name "diya.local";
+    option domain-name-servers 192.168.1.1;
+
+    ddns-domainname "diya.local.";
+    ddns-rev-domainname "1.168.192.in-addr.arpa.";
+}
+```
+
+### Step 6: Set Permissions
 ```bash
 chown named:named /var/named/diya.local.zone
 ```
@@ -70,9 +128,17 @@ chown named:named /var/named/diya.local.zone
 restorecon -v /var/named/diya.local.zone
 ```
 
-### Step 6: Configure Firewall
+### Step 7: Configure Firewall
 ```bash
 firewall-cmd --add-service=dns --permanent
+```
+```bash
+# Allow DNS over TCP (port 53)
+firewall-cmd --permanent --add-port=53/tcp
+```
+```bash
+# Allow DNS over UDP (port 53)
+firewall-cmd --permanent --add-port=53/udp
 ```
 ```bash
 firewall-cmd --reload
@@ -81,6 +147,9 @@ firewall-cmd --reload
 ### Step 7: Restart BIND
 ```bash
 systemctl restart named
+```
+```bash
+systemctl restart dhcpd
 ```
 
 ---
@@ -101,12 +170,15 @@ Set your CentOS server IP as Preferred DNS Server (e.g., 192.168.1.1)
 ---
 
 ## 🧪 Testing DDNS Updates
-### Option 1: Windows Native
+
+### ✅ Option 1: Windows Native
 ```cmd
 ipconfig /registerdns
 ```
 
-### Option 2: Using `nsupdate` (Linux)
+### ✅ Option 2: Using `nsupdate` (Linux)
+
+#### 🔄 Add A and PTR Records
 1. Create `update.txt`:
 ```txt
 server 192.168.1.1
@@ -115,10 +187,30 @@ key win-client-key <SECRET>
 update delete test.diya.local. A
 update add test.diya.local. 300 A 192.168.1.146
 send
+
+zone 1.168.192.in-addr.arpa
+update delete 146.1.168.192.in-addr.arpa. PTR
+update add 146.1.168.192.in-addr.arpa. 300 PTR test.diya.local.
+send
 ```
+
 2. Run:
 ```bash
 nsupdate -v update.txt
+```
+
+---
+
+### 🔍 Check Zone Status with `rndc`
+```bash
+rndc status
+```
+
+```bash
+rndc zonestatus diya.local
+```
+```bash
+rndc zonestatus 1.168.192.in-addr.arpa
 ```
 
 ---
@@ -246,6 +338,4 @@ chmod 600 /var/named/win-client-key.*
 ```
 
 ---
-
-Need help setting up a proxy update script or migrating to `/etc/bind`? Ping me!
 
