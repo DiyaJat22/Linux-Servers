@@ -181,12 +181,16 @@ ipconfig /registerdns
 
 ### ✅ Option 2: Using `nsupdate` (Linux)
 
+1. Run:
+```bash
+ nsupdate -k /etc/bind/win-client.key
+```
+
 #### 🔄 Add A and PTR Records
 1. Create `update.txt`:
 ```txt
 server 192.168.1.1
 zone diya.local
-key win-client-key <SECRET>
 update delete test.diya.local. A
 update add test.diya.local. 300 A 192.168.1.146
 send
@@ -195,11 +199,6 @@ zone 1.168.192.in-addr.arpa
 update delete 146.1.168.192.in-addr.arpa. PTR
 update add 146.1.168.192.in-addr.arpa. 300 PTR test.diya.local.
 send
-```
-
-2. Run:
-```bash
-nsupdate -v update.txt
 ```
 
 ---
